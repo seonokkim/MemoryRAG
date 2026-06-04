@@ -1,8 +1,11 @@
 # MemoryRAG
 
-![MemoryRAG demo home screen](asset/home.png)
-
-![MemoryRAG AI coach chat](asset/chat.gif)
+<p align="center">
+  <img src="asset/home.png" alt="MemoryRAG demo home screen" width="280" />
+</p>
+<p align="center">
+  <img src="asset/chat.gif" alt="MemoryRAG AI coach chat" width="280" />
+</p>
 
 Demo stack for an AI golf swing coach: a FastAPI backend with long-term memory and RAG, plus a React/Vite mobile-style frontend.
 

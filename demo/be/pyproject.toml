@@ -1,0 +1,15 @@
+[project]
+name = "memoryrag-be"
+version = "0.1.0"
+description = "AI coaching backend with RAG, LangGraph, and long-term memory"
+readme = "README.md"
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"

@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: memoryrag-be-config
+  namespace: memoryrag
+data:
+  APP_ENV: production
+  API_PREFIX: /api
+  LLM_PROVIDER: vertex
+  ENABLE_CLOUD_LOGGING: "true"
+  ENABLE_MEMORY_UPDATE: "true"
+  ENABLE_GUARDRAIL: "true"
+  VECTOR_STORE_PROVIDER: vertex
+  VERTEX_VECTOR_INDEX_ID: replace-me
+  VERTEX_VECTOR_ENDPOINT_ID: replace-me
+  VERTEX_VECTOR_DEPLOYED_INDEX_ID: replace-me

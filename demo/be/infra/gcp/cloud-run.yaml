@@ -1,0 +1,45 @@
+# Reference Cloud Run service spec (adjust project/region/secrets).
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: memoryrag-be
+  annotations:
+    run.googleapis.com/ingress: all
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/maxScale: "10"
+        run.googleapis.com/cloudsql-instances: PROJECT:REGION:INSTANCE
+    spec:
+      containerConcurrency: 80
+      timeoutSeconds: 300
+      containers:
+        - image: REGION-docker.pkg.dev/PROJECT/REPO/memoryrag-be:latest
+          ports:
+            - containerPort: 8080
+          env:
+            - name: APP_ENV
+              value: production
+            - name: LLM_PROVIDER
+              value: vertex
+            - name: ENABLE_CLOUD_LOGGING
+              value: "true"
+            - name: DB_HOST
+              value: /cloudsql/PROJECT:REGION:INSTANCE
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: memoryrag-db-user
+                  key: latest
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: memoryrag-db-password
+                  key: latest
+            - name: VERTEX_PROJECT_ID
+              value: PROJECT
+          resources:
+            limits:
+              cpu: "2"
+              memory: 2Gi

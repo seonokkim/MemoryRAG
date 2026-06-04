@@ -1,0 +1,42 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: memoryrag-be
+  namespace: memoryrag
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: memoryrag-be
+  template:
+    metadata:
+      labels:
+        app: memoryrag-be
+    spec:
+      containers:
+        - name: api
+          image: REGION-docker.pkg.dev/PROJECT/REPO/memoryrag-be:latest
+          ports:
+            - containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: memoryrag-be-config
+          env:
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: memoryrag-be-secrets
+                  key: DB_PASSWORD
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 10

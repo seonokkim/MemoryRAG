@@ -1,0 +1,15 @@
+# Optional — install only when needed (not required for local mock MVP)
+-r requirements.txt
+
+# Local vector retrieval (VECTOR_STORE_PROVIDER=chroma)
+llama-index-core>=0.11.0,<0.13
+llama-index-vector-stores-chroma>=0.2.0,<0.5
+chromadb>=0.5.0,<0.6
+
+# GCP: Vertex Gemini (LLM_PROVIDER=vertex) + Vector Search + Cloud Logging/GCS
+google-cloud-logging>=3.9.0,<4.0
+google-cloud-storage>=2.14.0,<3.0
+google-cloud-aiplatform>=1.38.0,<2.0
+
+# Optional LLM provider (LLM_PROVIDER=openai)
+openai>=1.30.0,<2.0

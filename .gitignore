@@ -1,0 +1,143 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+.pnpm-store/
+
+# Build outputs
+dist/
+build/
+out/
+*.tsbuildinfo
+
+# Environment & secrets
+.env
+.env.*
+!.env.example
+!.env.*.example
+*.pem
+*.key
+*-credentials.json
+service-account*.json
+gcloud/*.json
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+# Python (backend)
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+ENV/
+*.egg-info/
+.eggs/
+*.egg
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+coverage.xml
+*.cover
+.hypothesis/
+.tox/
+.nox/
+dmypy.json
+.pytype/
+.python-version
+uv.lock
+pip-log.txt
+pip-delete-this-directory.txt
+
+# demo/be — FastAPI backend (keep tests/*.py tracked)
+demo/be/.venv/
+demo/be/.env
+demo/be/.pytest_cache/
+demo/be/.mypy_cache/
+demo/be/.ruff_cache/
+demo/be/**/__pycache__/
+demo/be/htmlcov/
+demo/be/data/
+demo/be/data/uploads/
+demo/be/.chroma_memoryrag/
+demo/be/scripts/__pycache__/
+# Local run artifacts (not committed)
+demo/be/logs/
+demo/be/*.log
+demo/be/uvicorn.log
+
+# demo/fe — Vite frontend
+demo/fe/node_modules/
+demo/fe/dist/
+demo/fe/.env
+demo/fe/.env.*
+demo/fe/.vite/
+demo/fe/.eslintcache
+demo/fe/coverage/
+
+# Vector DB & local data
+*.db
+*.sqlite
+*.sqlite3
+chroma/
+.chroma/
+.chroma_memoryrag/
+faiss_index/
+*.index
+qdrant_storage/
+vertex_vector_local/
+data/cache/
+.cache/
+
+# GCP / Terraform (demo/be infra)
+demo/be/infra/gcp/terraform/.terraform/
+demo/be/infra/gcp/terraform/*.tfstate
+demo/be/infra/gcp/terraform/*.tfstate.*
+
+# Docker local volumes (MySQL data)
+demo/be/infra/docker/**/mysql_data/
+
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+ehthumbs.db
+
+# Editors & IDEs
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json.example
+*.swp
+*.swo
+*~
+.cursor/
+
+# Vite / frontend tooling
+.vite/
+.turbo/
+.parcel-cache/
+.eslintcache
+.stylelintcache
+
+# Test / CI artifacts
+coverage/
+.nyc_output/
+test-results/
+playwright-report/
+blob-report/
+
+# Misc
+*.local
+.dev/

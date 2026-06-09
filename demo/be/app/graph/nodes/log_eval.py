@@ -26,6 +26,10 @@ def log_eval(state: CoachState, db: Session) -> dict:
             guardrail_status=state.get("guardrail_status"),
         )
     )
+    llm_meta = {
+        "llm_provider": state.get("llm_provider") or settings.llm_provider,
+        "llm_model": state.get("llm_model") or "",
+    }
     return append_trace(
         state,
         "log_eval",
@@ -34,5 +38,8 @@ def log_eval(state: CoachState, db: Session) -> dict:
             "retrieved_chunk_count": chunk_count,
             "guardrail_status": state.get("guardrail_status"),
             "failure_type": state.get("failure_type"),
+            "quality_status": state.get("quality_status"),
+            "retry_count": state.get("retry_count", 0),
+            **llm_meta,
         },
     )

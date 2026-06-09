@@ -2,7 +2,7 @@
 apiVersion: serving.knative.dev/v1
 kind: Service
 metadata:
-  name: memoryrag-be
+  name: memory-rag-be
   annotations:
     run.googleapis.com/ingress: all
 spec:
@@ -15,7 +15,7 @@ spec:
       containerConcurrency: 80
       timeoutSeconds: 300
       containers:
-        - image: REGION-docker.pkg.dev/PROJECT/REPO/memoryrag-be:latest
+        - image: REGION-docker.pkg.dev/PROJECT/REPO/memory-rag-be:latest
           ports:
             - containerPort: 8080
           env:
@@ -30,12 +30,12 @@ spec:
             - name: DB_USER
               valueFrom:
                 secretKeyRef:
-                  name: memoryrag-db-user
+                  name: memory-rag-db-user
                   key: latest
             - name: DB_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: memoryrag-db-password
+                  name: memory-rag-db-password
                   key: latest
             - name: VERTEX_PROJECT_ID
               value: PROJECT

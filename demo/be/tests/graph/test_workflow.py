@@ -26,7 +26,10 @@ class TestCoachWorkflow:
         assert result.get("assistant_message_id")
         trace = result.get("trace") or {}
         assert "classify_question" in trace
+        assert "invoke_tools" in trace
         assert "log_eval" in trace
+        assert result.get("llm_provider") == "mock"
+        assert result.get("llm_model") == "mock"
 
         eval_row = db_session.scalar(
             select(EvalLog).where(EvalLog.conversation_id == conversation.id)

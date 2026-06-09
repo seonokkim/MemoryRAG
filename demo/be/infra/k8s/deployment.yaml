@@ -1,31 +1,31 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: memoryrag-be
-  namespace: memoryrag
+  name: memory-rag-be
+  namespace: memory-rag
 spec:
   replicas: 2
   selector:
     matchLabels:
-      app: memoryrag-be
+      app: memory-rag-be
   template:
     metadata:
       labels:
-        app: memoryrag-be
+        app: memory-rag-be
     spec:
       containers:
         - name: api
-          image: REGION-docker.pkg.dev/PROJECT/REPO/memoryrag-be:latest
+          image: REGION-docker.pkg.dev/PROJECT/REPO/memory-rag-be:latest
           ports:
             - containerPort: 8080
           envFrom:
             - configMapRef:
-                name: memoryrag-be-config
+                name: memory-rag-be-config
           env:
             - name: DB_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: memoryrag-be-secrets
+                  name: memory-rag-be-secrets
                   key: DB_PASSWORD
           resources:
             requests:

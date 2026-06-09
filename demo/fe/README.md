@@ -1,35 +1,39 @@
-# MemoryRAG frontend (demo)
+# memory-rag frontend (demo)
 
-Mobile-style React/Vite PoC for the AI swing coach demo. **Main flow is wired to the local backend**; some screens still use inline mocks as fallback.
+Mobile-style React/Vite UI for the AI swing coach demo. Main flows call the local FastAPI backend; Profile, Routine, and Monthly Report use static demo content.
 
 ## Setup
 
-```powershell
+```bash
 cd demo/fe
 pnpm install
 pnpm dev
 ```
 
-Optional overrides: create `.env.local` with `VITE_API_BASE_URL` and `VITE_DEMO_USER_ID` (defaults match [../../README.md](../../README.md)).
-
 Open http://localhost:5173 (backend must run at http://localhost:8000).
+
+**Dev:** Vite proxies `/api` → `http://127.0.0.1:8000`. Coach chat uses the live API only — no mock replies on failure.
 
 ## Environment
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `VITE_API_BASE_URL` | `http://localhost:8000` | FastAPI base URL |
+| `VITE_API_BASE_URL` | *(unset in dev)* | Override API base; dev uses Vite proxy |
 | `VITE_DEMO_USER_ID` | `1` | Seed user Riley |
 
-## Connected vs mock
+Optional: create `.env.local` with the overrides above.
 
-**Connected:** Home, Upload, Analysis, AI Coach, Dev (prompt versions + trace)
+## Connected vs static screens
 
-**Mock fallback:** Profile detail charts, Routine, Monthly Report, partial Dev workflow/RAG tabs
+**API-backed:** Home, Upload, Analysis, AI Coach, Dev panel (trace + prompt versions)
 
-API client: `src/app/api/client.ts` · backend: [demo/be/README.md](../be/README.md)
+**Static demo data:** Profile, Routine, Monthly Report
+
+See [../be/docs/fe_integration.md](../be/docs/fe_integration.md).
 
 ## Scripts
 
 - `pnpm dev` — local dev server
 - `pnpm build` — production build check
+- `pnpm test:e2e:stack` — live E2E via Vite proxy (BE + FE must be running)
+- `pnpm test:e2e` — Playwright browser E2E (needs `playwright install-deps` on Linux)

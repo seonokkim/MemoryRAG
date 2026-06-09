@@ -12,19 +12,21 @@ class Settings(BaseSettings):
     )
 
     app_env: str = "local"
-    app_name: str = "MemoryRAG-be"
+    app_name: str = "memory-rag-be"
     app_version: str = "0.1.0"
     api_prefix: str = "/api"
     cors_origins: str = "http://localhost:5173,http://localhost:3000"
 
     db_host: str = "localhost"
     db_port: int = 3306
-    db_user: str = "memoryrag"
-    db_password: str = "memoryrag"
-    db_name: str = "memoryrag"
+    db_user: str = "memory_rag"
+    db_password: str = ""
+    db_name: str = "memory_rag"
     database_url: str = ""
 
-    llm_provider: Literal["mock", "vertex", "openai"] = "mock"
+    llm_provider: Literal["mock", "gemini_api", "vertex", "openai"] = "mock"
+    gemini_api_key: str = ""
+    gemini_model: str = "gemini-flash-latest"
     vertex_project_id: str = ""
     vertex_location: str = "us-central1"
     vertex_model_name: str = "gemini-1.5-flash"
@@ -44,8 +46,12 @@ class Settings(BaseSettings):
     log_json: bool = False
     enable_memory_update: bool = True
     enable_guardrail: bool = True
+    enable_quality_loop: bool = True
+    enable_agent_tools: bool = True
+    quality_max_retries: int = 2
+    quality_confidence_threshold: float = 0.5
 
-    chroma_persist_dir: str = ".chroma_memoryrag"
+    chroma_persist_dir: str = ".chroma_memory_rag"
 
     active_prompt_version: str = "v0.3"
     recent_swing_limit: int = 5
@@ -53,7 +59,7 @@ class Settings(BaseSettings):
 
     langsmith_tracing: bool = False
     langsmith_api_key: str = ""
-    langsmith_project: str = "MemoryRAG-local"
+    langsmith_project: str = "memory-rag-demo"
     langsmith_endpoint: str = "https://api.smith.langchain.com"
 
     @property

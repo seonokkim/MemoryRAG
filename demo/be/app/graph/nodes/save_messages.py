@@ -23,6 +23,12 @@ def save_messages(state: CoachState, db: Session) -> dict:
     elif structured:
         structured_json = structured
 
+    trace_payload = dict(state.get("trace") or {})
+    trace_payload["llm_provider"] = state.get("llm_provider")
+    trace_payload["llm_model"] = state.get("llm_model")
+    trace_payload["quality_status"] = state.get("quality_status")
+    trace_payload["retry_count"] = state.get("retry_count", 0)
+
     assistant = repo.add_message(
         Message(
             conversation_id=conv_id,
@@ -31,7 +37,7 @@ def save_messages(state: CoachState, db: Session) -> dict:
             structured_output_json=structured_json,
             retrieved_context_json={
                 "sources": state.get("retrieved_sources", []),
-                "trace": state.get("trace"),
+                "trace": trace_payload,
             },
             latency_ms=state.get("latency_ms"),
         )

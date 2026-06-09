@@ -28,7 +28,7 @@ class VertexAIClient(BaseLLMClient):
     def __init__(self, settings: Settings) -> None:
         self.project_id = (settings.vertex_project_id or "").strip()
         self.location = settings.vertex_location or "us-central1"
-        self.model_name = settings.vertex_model_name or "gemini-1.5-flash"
+        self._model_id = settings.vertex_model_name or "gemini-1.5-flash"
         if not self.project_id:
             raise VertexConfigurationError(
                 "VERTEX_PROJECT_ID is required when LLM_PROVIDER=vertex. "
@@ -37,6 +37,14 @@ class VertexAIClient(BaseLLMClient):
             )
         self._model: Any = None
         self._mock_fallback = MockLLMClient()
+
+    @property
+    def provider_name(self) -> str:
+        return "vertex"
+
+    @property
+    def model_name(self) -> str:
+        return self._model_id
 
     def _load_prompt(self, filename: str) -> str:
         path = _PROMPTS_DIR / filename
@@ -54,7 +62,7 @@ class VertexAIClient(BaseLLMClient):
                 "Run: pip install -r requirements-optional.txt"
             ) from exc
         vertexai.init(project=self.project_id, location=self.location)
-        self._model = GenerativeModel(self.model_name)
+        self._model = GenerativeModel(self._model_id)
         return self._model
 
     def _generate_text(self, prompt: str, *, json_mode: bool = False) -> str:

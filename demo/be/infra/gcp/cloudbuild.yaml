@@ -3,7 +3,7 @@ steps:
     args:
       - build
       - -t
-      - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/memoryrag-be:${SHORT_SHA}
+      - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/memory-rag-be:${SHORT_SHA}
       - -f
       - infra/docker/Dockerfile
       - .
@@ -11,21 +11,21 @@ steps:
   - name: gcr.io/cloud-builders/docker
     args:
       - push
-      - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/memoryrag-be:${SHORT_SHA}
+      - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/memory-rag-be:${SHORT_SHA}
   - name: gcr.io/google.com/cloudsdktool/cloud-sdk
     entrypoint: gcloud
     args:
       - run
       - deploy
-      - memoryrag-be
-      - --image=${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/memoryrag-be:${SHORT_SHA}
+      - memory-rag-be
+      - --image=${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/memory-rag-be:${SHORT_SHA}
       - --region=${_REGION}
       - --platform=managed
       - --allow-unauthenticated
 
 substitutions:
   _REGION: us-central1
-  _REPO: memoryrag
+  _REPO: memory-rag
 
 images:
-  - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/memoryrag-be:${SHORT_SHA}
+  - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/memory-rag-be:${SHORT_SHA}

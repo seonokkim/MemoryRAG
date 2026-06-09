@@ -63,6 +63,7 @@ pip-delete-this-directory.txt
 # demo/be — FastAPI backend (keep tests/*.py tracked)
 demo/be/.venv/
 demo/be/.env
+demo/be/infra/docker/.env
 demo/be/.pytest_cache/
 demo/be/.mypy_cache/
 demo/be/.ruff_cache/

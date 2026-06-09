@@ -22,6 +22,17 @@ class EvalService:
     def get_conversation_trace(self, conversation_id: int) -> ConversationTraceResponse:
         log = self.repo.latest_for_conversation(conversation_id)
         workflow_trace = self._workflow_trace_for_conversation(conversation_id)
+        log_eval_trace = (
+            workflow_trace.get("log_eval") if isinstance(workflow_trace, dict) else {}
+        )
+        if not isinstance(log_eval_trace, dict):
+            log_eval_trace = {}
+
+        def _meta(key: str):
+            if isinstance(workflow_trace, dict) and workflow_trace.get(key) is not None:
+                return workflow_trace.get(key)
+            return log_eval_trace.get(key)
+
         if not log:
             return ConversationTraceResponse(
                 conversation_id=conversation_id,
@@ -32,6 +43,10 @@ class EvalService:
                 guardrail_status=None,
                 failure_type=None,
                 retrieved_sources=[],
+                llm_provider=_meta("llm_provider"),
+                llm_model=_meta("llm_model"),
+                quality_status=_meta("quality_status"),
+                retry_count=_meta("retry_count"),
                 trace=workflow_trace,
             )
         trace = {**workflow_trace, "eval_log_id": log.id}
@@ -44,6 +59,10 @@ class EvalService:
             guardrail_status=log.guardrail_status,
             failure_type=log.failure_type,
             retrieved_sources=["swing_history", "user_profile", "golf_knowledge"],
+            llm_provider=_meta("llm_provider"),
+            llm_model=_meta("llm_model"),
+            quality_status=_meta("quality_status"),
+            retry_count=_meta("retry_count"),
             trace=trace,
         )
 

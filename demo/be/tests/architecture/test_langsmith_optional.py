@@ -7,8 +7,12 @@ from app.core.observability import configure_langsmith
 
 
 class TestLangSmithOptional:
-    def test_default_settings_do_not_require_api_key(self) -> None:
-        settings = Settings()
+    def test_default_settings_do_not_require_api_key(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        for key in ("LANGSMITH_TRACING", "LANGSMITH_API_KEY", "LANGCHAIN_API_KEY"):
+            monkeypatch.delenv(key, raising=False)
+        settings = Settings(_env_file=None)
         assert settings.langsmith_tracing is False
         assert settings.langsmith_api_key == ""
 
@@ -29,12 +33,15 @@ class TestLangSmithOptional:
             Settings(
                 langsmith_tracing=True,
                 langsmith_api_key="ls-test-key",
-                langsmith_project="MemoryRAG-test",
+                langsmith_project="memory-rag-test",
+                langsmith_endpoint="https://apac.api.smith.langchain.com",
             )
         )
         assert os.environ.get("LANGSMITH_TRACING") == "true"
         assert os.environ.get("LANGSMITH_API_KEY") == "ls-test-key"
-        assert os.environ.get("LANGSMITH_PROJECT") == "MemoryRAG-test"
+        assert os.environ.get("LANGSMITH_PROJECT") == "memory-rag-test"
+        assert os.environ.get("LANGSMITH_ENDPOINT") == "https://apac.api.smith.langchain.com"
+        assert os.environ.get("LANGCHAIN_ENDPOINT") == "https://apac.api.smith.langchain.com"
         assert os.environ.get("LANGCHAIN_TRACING_V2") == "true"
         assert os.environ.get("LANGCHAIN_API_KEY") == "ls-test-key"
 
@@ -61,7 +68,7 @@ class TestLangSmithOptional:
         cfg = build_coach_workflow_invoke_config(
             settings, user_id=1, conversation_id=2, question_type="swing_diagnosis"
         )
-        assert cfg["run_name"] == "MemoryRAG-coach-workflow"
+        assert cfg["run_name"] == "memory-rag-coach-workflow"
         assert cfg["configurable"]["thread_id"] == "2"
         assert cfg["metadata"]["user_id"] == 1
         assert cfg["metadata"]["question_type"] == "swing_diagnosis"

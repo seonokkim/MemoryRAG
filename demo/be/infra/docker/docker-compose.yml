@@ -1,17 +1,17 @@
 services:
   mysql:
     image: mysql:8.0
-    container_name: memoryrag-mysql
+    container_name: memory-rag-mysql
     restart: unless-stopped
     ports:
       - "3306:3306"
     environment:
-      MYSQL_ROOT_PASSWORD: root
-      MYSQL_DATABASE: memoryrag
-      MYSQL_USER: memoryrag
-      MYSQL_PASSWORD: memoryrag
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Copy .env.example to .env and set MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-memory_rag}
+      MYSQL_USER: ${MYSQL_USER:-memory_rag}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?Copy .env.example to .env and set MYSQL_PASSWORD}
     volumes:
-      - memoryrag_mysql_data:/var/lib/mysql
+      - memory_rag_mysql_data:/var/lib/mysql
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
       interval: 5s
@@ -19,4 +19,4 @@ services:
       retries: 10
 
 volumes:
-  memoryrag_mysql_data:
+  memory_rag_mysql_data:

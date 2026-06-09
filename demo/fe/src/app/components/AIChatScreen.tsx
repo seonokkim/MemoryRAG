@@ -2,8 +2,10 @@ import { useState, useRef, useEffect } from "react";
 import { Send, ThumbsUp, ThumbsDown, Code2, Bot } from "lucide-react";
 import { useNavigate } from "react-router";
 import {
+  ApiError,
   DEMO_CONVERSATION_KEY,
   DEMO_USER_ID,
+  getHealth,
   sendCoachMessage,
   sendFeedback,
 } from "../api/client";
@@ -16,53 +18,6 @@ const SUGGESTED = [
   "What type of golfer am I?",
 ];
 
-const INITIAL_MESSAGES = [
-  {
-    id: 1,
-    role: "ai",
-    text: "Hi Riley. I reviewed today's swing analysis. Early upper-body opening in the downswing is showing up again. Ask me anything about your swing.",
-    sources: ["Recent swing history", "User profile"],
-    structured: null,
-  },
-];
-
-const AI_RESPONSES: Record<string, {
-  text: string;
-  sources: string[];
-  structured: { cause: string; fix: string; drill: string; effect: string } | null;
-}> = {
-  "Why do I keep slicing?": {
-    text: "Your recent swings show a pattern where the upper body opens before the lower body in the downswing. That often leaves the clubface open at impact and increases slice risk.\n\nIn your last 3 swings, shoulder rotation was 23% faster than average. Today I recommend 10 minutes of lower-body lead and shoulder-closure drills.",
-    sources: ["Recent swing history", "Golf coaching knowledge", "Previous conversation"],
-    structured: {
-      cause: "Upper body starts rotating before the lower body in the downswing",
-      fix: "Correct rotation sequence with lower-body lead training",
-      drill: "Lower-body lead drill · 10 min · Beginner",
-      effect: "Expected slice reduction and better direction control",
-    },
-  },
-  "Am I improving compared to last time?": {
-    text: "Yes, you're clearly improving. Your average score over the last 5 swings is up +7 points. Swing tempo stabilized at 88, and your backswing path is more consistent.\n\nEarly upper-body opening before impact still needs work, but the overall trend is very positive.",
-    sources: ["Recent swing history", "User profile"],
-    structured: null,
-  },
-  "What should I practice today?": {
-    text: "Based on today's analysis, I recommend 3 drills:\n\n1. Lower-body lead drill (10 min) – fix early upper-body opening\n2. Shoulder closure drill (8 min) – stabilize clubface before impact\n3. Tempo consistency drill (7 min) – stabilize rhythm\n\nThat's 25 minutes total. See the Routine tab for details.",
-    sources: ["Recent swing history", "Golf coaching knowledge", "User profile"],
-    structured: {
-      cause: "Upper body leads downswing + unstable impact",
-      fix: "Sequential lower-body lead + shoulder closure training",
-      drill: "3 drills · 25 min total routine",
-      effect: "Less slice + more stable impact",
-    },
-  },
-  "What type of golfer am I?": {
-    text: "You're a \"fast upper-body rotation\" golfer.\n\nStrengths: stable swing tempo and consistent backswing path\nWeakness: upper body tends to open quickly early in the downswing\n\nFocus on lower-body lead drills and you should improve quickly. Check the Profile tab for the full breakdown.",
-    sources: ["User profile", "Recent swing history", "Previous conversation"],
-    structured: null,
-  },
-};
-
 interface Message {
   id: number;
   role: "user" | "ai";
@@ -71,6 +26,7 @@ interface Message {
   structured?: { cause: string; fix: string; drill: string; effect: string } | null;
   feedback?: "good" | "bad" | null;
   backendMessageId?: number;
+  fromLiveApi?: boolean;
 }
 
 function mapSources(sources: string[] | undefined): string[] {
@@ -84,14 +40,37 @@ function mapSources(sources: string[] | undefined): string[] {
 
 export function AIChatScreen() {
   const navigate = useNavigate();
-  const [messages, setMessages] = useState<Message[]>(INITIAL_MESSAGES as Message[]);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [typing, setTyping] = useState(false);
   const [conversationId, setConversationId] = useState<number | null>(() => {
     const raw = sessionStorage.getItem(DEMO_CONVERSATION_KEY);
     return raw ? Number(raw) : null;
   });
+  const [apiConnected, setApiConnected] = useState<boolean | null>(null);
+  const [apiError, setApiError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    getHealth()
+      .then(h => {
+        if (!cancelled) {
+          setApiConnected(h.status === "ok");
+          setApiError(null);
+        }
+      })
+      .catch(err => {
+        if (!cancelled) {
+          setApiConnected(false);
+          const msg = err instanceof ApiError ? err.message : "API unreachable";
+          setApiError(msg);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
@@ -103,6 +82,7 @@ export function AIChatScreen() {
     setMessages(prev => [...prev, userMsg]);
     setInput("");
     setTyping(true);
+    setApiError(null);
 
     try {
       const res = await sendCoachMessage({
@@ -130,20 +110,21 @@ export function AIChatScreen() {
         structured,
         feedback: null,
         backendMessageId: res.message_id,
+        fromLiveApi: true,
       };
+      setApiConnected(true);
       setMessages(prev => [...prev, aiMsg]);
-    } catch {
-      const resp = AI_RESPONSES[text] || {
-        text: "I'm analyzing your swing history and coaching knowledge. If you can be a bit more specific, I can give a more accurate answer.",
-        sources: ["Golf coaching knowledge"],
-        structured: null,
-      };
+    } catch (err) {
+      setApiConnected(false);
+      const msg =
+        err instanceof ApiError
+          ? err.message
+          : "Cannot reach the coach API. Start the backend (uvicorn :8000) and retry.";
+      setApiError(msg);
       const aiMsg: Message = {
         id: Date.now() + 1,
         role: "ai",
-        text: resp.text,
-        sources: resp.sources,
-        structured: resp.structured,
+        text: `Coach API error: ${msg}\n\nCoach chat requires the backend on :8000 (mock or real LLM).`,
         feedback: null,
       };
       setMessages(prev => [...prev, aiMsg]);
@@ -187,12 +168,17 @@ export function AIChatScreen() {
               </div>
               <h1 style={{ color: c.onDark, fontSize: 18, fontWeight: 700 }}>AI Coach</h1>
               <span style={{
-                background: c.surface, color: c.ink,
+                background: apiConnected === false ? "#fecaca" : apiConnected ? "#bbf7d0" : c.surface,
+                color: apiConnected === false ? "#991b1b" : apiConnected ? "#166534" : c.muted,
                 fontSize: 9, fontWeight: 700, padding: "2px 6px", borderRadius: 8,
-              }}>LIVE</span>
+              }}>
+                {apiConnected === null ? "…" : apiConnected ? "LIVE API" : "OFFLINE"}
+              </span>
             </div>
             <p style={{ color: c.onDarkMuted, fontSize: 11, marginTop: 4, marginLeft: 40 }}>
-              Answers based on your swing history and golf knowledge
+              {apiConnected
+                ? "Answers from FastAPI LangGraph workflow"
+                : "Start backend at :8000 — coach chat has no offline fallback"}
             </p>
           </div>
           <button
@@ -214,11 +200,38 @@ export function AIChatScreen() {
         </div>
       </div>
 
+      {apiError && (
+        <div style={{
+          background: "#fef2f2",
+          borderBottom: `1px solid #fecaca`,
+          color: "#991b1b",
+          fontSize: 11,
+          padding: "8px 14px",
+          flexShrink: 0,
+        }}>
+          {apiError}
+        </div>
+      )}
+
       {/* Messages */}
       <div
         ref={scrollRef}
         style={{ flex: 1, overflowY: "auto", padding: "16px 12px", display: "flex", flexDirection: "column", gap: 12 }}
       >
+        {messages.length === 0 && !typing && (
+          <div style={{
+            margin: "24px 8px",
+            padding: "16px",
+            borderRadius: 14,
+            border: `1px solid ${c.border}`,
+            background: c.surface,
+          }}>
+            <p style={{ color: c.ink, fontSize: 14, fontWeight: 600, marginBottom: 6 }}>Ask about your swing</p>
+            <p style={{ color: c.muted, fontSize: 12, lineHeight: 1.6 }}>
+              Questions go to the FastAPI coach workflow. Pick a suggestion below or type your own.
+            </p>
+          </div>
+        )}
         {messages.map(msg => (
           <div key={msg.id} style={{
             display: "flex",
@@ -236,6 +249,11 @@ export function AIChatScreen() {
                   <Bot size={12} color={c.surface} />
                 </div>
                 <span style={{ color: c.subtle, fontSize: 11, fontWeight: 600 }}>AI Coach</span>
+                {msg.fromLiveApi && (
+                  <span data-testid="coach-live-reply" style={{ color: "#166534", fontSize: 9, fontWeight: 700 }}>
+                    LIVE
+                  </span>
+                )}
               </div>
             )}
 

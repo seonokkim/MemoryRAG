@@ -1,4 +1,4 @@
-# MemoryRAG backend
+# memory-rag backend
 
 Production-oriented FastAPI backend for a generic AI swing coaching demo.
 
@@ -10,10 +10,10 @@ Production-oriented FastAPI backend for a generic AI swing coaching demo.
 |-------|------------|------|
 | API | FastAPI | REST + OpenAPI (`/docs`) |
 | Source of truth | MySQL 8 | Users, swings, conversations, memories, knowledge chunks |
-| Workflow | LangGraph | 12-node coach pipeline |
+| Workflow | LangGraph | 16-node coach pipeline (quality loop + tools) |
 | RAG framework | LlamaIndex-oriented retrievers | SQL fallback by default; optional Chroma / Vertex Vector Search |
-| LLM | Provider abstraction | **mock** (default), optional Vertex Gemini / OpenAI |
-| Deploy (later) | Cloud Run, Cloud SQL, GCS, Vertex | See `infra/gcp/` and `infra/k8s/` |
+| LLM | Provider abstraction | **mock** (default), optional Gemini API / Vertex / OpenAI |
+| Deploy (later) | Cloud Run, Cloud SQL, GCS, Vertex | See [docs/manual_setup_later.md](docs/manual_setup_later.md) |
 
 Real video/pose analysis is **out of scope**; swing analysis is structured mock data.
 
@@ -23,7 +23,7 @@ Real video/pose analysis is **out of scope**; swing analysis is structured mock 
 flowchart LR
   FE[React FE mock] --> API[FastAPI :8000]
   API --> MySQL[(MySQL SoT)]
-  API --> Graph[LangGraph 12 nodes]
+  API --> Graph[LangGraph 16 nodes]
   Graph --> RAG[Retrievers]
   RAG --> VS{VECTOR_STORE_PROVIDER}
   VS -->|none| SQL[SQL keyword fallback]
@@ -34,7 +34,7 @@ flowchart LR
 
 ## Architecture policy
 
-- **Layers:** HTTP routes → services → repositories; LangGraph nodes use LLM/RAG factories with mock/SQL fallbacks when cloud providers are unset.
+- See [docs/interface_policy.md](docs/interface_policy.md) for interface/implementation boundaries, naming, fallbacks, and node responsibilities.
 - **Local default:** `LLM_PROVIDER=mock`, `VECTOR_STORE_PROVIDER=none`
 - **Production target:** Vertex AI Gemini + Vertex AI Vector Search (+ optional GCS storage)
 
@@ -52,11 +52,13 @@ flowchart LR
 
 ```powershell
 cd demo/be/infra/docker
+copy .env.example .env
+# Set MYSQL_ROOT_PASSWORD and MYSQL_PASSWORD in .env (gitignored)
 docker compose up -d
 docker compose ps
 ```
 
-MySQL 8 · database `memoryrag` · user/password `memoryrag` / `memoryrag` · port `3306`.
+MySQL 8 · database `memory_rag` · credentials in `infra/docker/.env` (see `.env.example`) · port `3306`.
 
 ### 2. Environment
 
@@ -65,6 +67,7 @@ cd demo/be
 copy .env.example .env
 ```
 
+Set `DB_PASSWORD` in `.env` to match `MYSQL_PASSWORD` in `infra/docker/.env`.  
 Default `.env` uses `LLM_PROVIDER=mock` and `VECTOR_STORE_PROVIDER=none`.
 
 ### 3. Python dependencies (core only)
@@ -111,6 +114,18 @@ Or: `.\scripts\run_local.ps1`
 
 - Docs: http://localhost:8000/docs  
 - Health: http://localhost:8000/api/health  
+
+### LangSmith APAC & LangGraph Studio (optional)
+
+- [docs/langsmith_studio_setup.md](docs/langsmith_studio_setup.md) — APAC tracing + smoke tests
+- [docs/langgraph_studio_setup.md](docs/langgraph_studio_setup.md) — **16-node** coach graph in Studio (`memory_rag_coach`)
+
+```bash
+cd demo/be && source .venv/bin/activate
+export PYTHONPATH=.
+./scripts/run_studio.sh
+# or: langgraph dev --config langgraph.json --studio-url https://apac.smith.langchain.com
+```
 
 ### Local logs
 
@@ -166,22 +181,13 @@ curl http://localhost:8000/api/dev/conversations/1/trace
 
 ## LangGraph workflow
 
-Linear 12-node pipeline (`app/graph/workflow.py`):
+16-node coach graph with conditional routing (`app/graph/workflow.py`):
 
-1. `load_context` — recent messages from MySQL  
-2. `classify_question` — mock keyword classifier  
-3. `retrieve_profile`  
-4. `retrieve_swing_history`  
-5. `retrieve_memory`  
-6. `retrieve_knowledge`  
-7. `generate_answer` — structured coaching JSON  
-8. `validate_output` — Pydantic schema  
-9. `guardrail` — safety / insufficient data  
-10. `save_messages`  
-11. `update_memory`  
-12. `log_eval` — `eval_logs` + trace  
+1. `load_context` → `classify_question` → `retrieve_profile` → `retrieve_swing_history` → `retrieve_memory` → `retrieve_knowledge` → `invoke_tools` → `generate_answer` → `validate_output`  
+2. Quality loop: `evaluate_answer` → `rewrite_query` (retry retrieval) or `fallback_answer`  
+3. `guardrail` → `save_messages` → optional `update_memory` → `log_eval`
 
-Each node appends to `state["trace"]` for DevPanel debugging.
+Each node appends to `state["trace"]` for `/api/dev/conversations/{id}/trace` and LangSmith (when enabled).
 
 ## RAG and vector strategy
 
@@ -203,7 +209,7 @@ MySQL always stores chunk text and `vector_id`. Vector backends are optional acc
 
 No GCP project, billing, service account keys, Vertex index, Cloud SQL, Cloud Run deploy, Secret Manager, GCS, OpenAI key, or Chroma install.
 
-For production deployment placeholders, see [infra/gcp/README.md](infra/gcp/README.md) and [infra/k8s/README.md](infra/k8s/README.md).
+See [docs/manual_setup_later.md](docs/manual_setup_later.md) for the full GCP checklist.
 
 ## Real LLM demo mode (Vertex Gemini)
 
@@ -233,7 +239,7 @@ Optional tracing:
 ```env
 LANGSMITH_TRACING=true
 LANGSMITH_API_KEY=your_langsmith_key
-LANGSMITH_PROJECT=MemoryRAG-local
+LANGSMITH_PROJECT=memory-rag-local
 ```
 
 ### 3. Run API (MySQL + seed as in Quick start)
@@ -259,11 +265,11 @@ curl -X POST http://localhost:8000/api/coach/chat \
 
 `VertexAIClient` calls Gemini for `classify_question_sync`, `generate_structured_answer_sync`, and `extract_memory_sync`. JSON parse failures fall back to keyword/mock logic; missing `VERTEX_PROJECT_ID` fails at client startup.
 
-Later, switch vectors only: `VECTOR_STORE_PROVIDER=vertex` plus `VERTEX_VECTOR_*` IDs in `.env` (see `infra/gcp/env.example.yaml`).
+Later, switch vectors only: `VECTOR_STORE_PROVIDER=vertex` + `VERTEX_VECTOR_*` IDs (see [docs/manual_setup_later.md](docs/manual_setup_later.md)).
 
 ## Optional LangSmith tracing
 
-**LangGraph** orchestrates the coach workflow. **LangSmith** is optional external observability for tracing and debugging (JD-aligned LLMOps). It does **not** replace MySQL `eval_logs` or the Dev trace API.
+**LangGraph** orchestrates the coach workflow. **LangSmith** is optional external observability for tracing and debugging. It does **not** replace MySQL `eval_logs` or the Dev trace API.
 
 Default: `LANGSMITH_TRACING=false` — no API key required.
 
@@ -275,18 +281,18 @@ To enable locally:
 ```env
 LANGSMITH_TRACING=true
 LANGSMITH_API_KEY=your_langsmith_key
-LANGSMITH_PROJECT=MemoryRAG-local
+LANGSMITH_PROJECT=memory-rag-local
 LANGSMITH_ENDPOINT=https://api.smith.langchain.com
 ```
 
 3. Restart the API and call `POST /api/coach/chat`.
-4. Open your LangSmith project and inspect the `MemoryRAG-coach-workflow` run.
+4. Open your LangSmith project and inspect the `memory-rag-coach-workflow` run.
 
 Configured at startup via `app/core/observability.py` (`configure_langsmith`). LangGraph invokes use run name + metadata (`user_id`, `llm_provider`, `vector_store_provider`, etc.).
 
 ## Frontend integration (connected)
 
-The main demo flow in `demo/fe` calls this API (see [demo/fe/README.md](../fe/README.md)).
+The main demo flow in `demo/fe` calls this API. See [docs/fe_integration.md](docs/fe_integration.md).
 
 ```powershell
 # demo/fe/.env.local
@@ -298,7 +304,7 @@ pnpm install
 pnpm dev
 ```
 
-Connected: Home, Upload, Analysis, AI Coach, Dev (prompt versions / trace). Profile, Routine, and Monthly Report remain mock-first with API fallback elsewhere.
+Connected: Home, Upload, Analysis, AI Coach, Dev (prompt versions + LangGraph trace). Profile, Routine, and Monthly Report use static demo data.
 
 ## GCP-ready layout
 
@@ -320,10 +326,9 @@ Recommended production: **Cloud Run + Cloud SQL + Vertex AI Vector Search + Vert
 
 ## Next steps
 
-1. Wire `demo/fe` to REST API  
-2. Replace placeholder Vertex embeddings with production models  
-3. Deploy Phase 7 to GCP when manual setup is done  
-4. Add auth and rate limiting  
+1. Replace placeholder Vertex embeddings with production models  
+2. Deploy to GCP when manual setup is done (see [docs/manual_setup_later.md](docs/manual_setup_later.md))  
+3. Add auth and rate limiting for `/api/dev/*` in production  
 
 ## Project layout
 
@@ -339,5 +344,5 @@ app/storage/      BaseStorageService + local / GCS
 alembic/          Migrations
 scripts/          seed_demo_data, reset_db, smoke_vertex_chat.py, run_local.ps1
 tests/            api, services, graph, rag modules
-infra/            docker, gcp, k8s deployment artifacts
+docs/             manual_setup_later, fe_integration
 ```

@@ -6,7 +6,8 @@ from app.rag.knowledge_index import KnowledgeIndexService
 
 def retrieve_knowledge(state: CoachState, db: Session) -> dict:
     index = KnowledgeIndexService(db)
-    chunks = index.query(state["user_message"], top_k=5)
+    query = state.get("rewritten_query") or state["user_message"]
+    chunks = index.query(query, top_k=5)
     payload = [
         {"content": c.content, "score": c.score, "metadata": c.metadata}
         for c in chunks

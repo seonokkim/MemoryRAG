@@ -11,11 +11,19 @@ import type {
   UserProfile,
 } from "./types";
 
-const API_BASE =
-  (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, "") ||
-  "http://localhost:8000";
+/** In dev, default "" so requests hit Vite proxy (/api → :8000). Override with VITE_API_BASE_URL. */
+const API_BASE = (
+  import.meta.env.VITE_API_BASE_URL as string | undefined
+)?.replace(/\/$/, "") ?? (import.meta.env.DEV ? "" : "http://localhost:8000");
 
 const API_PREFIX = "/api";
+
+export interface HealthResponse {
+  status: string;
+  service: string;
+  version: string;
+  environment: string;
+}
 
 export const DEMO_USER_ID = Number(import.meta.env.VITE_DEMO_USER_ID ?? 1);
 
@@ -68,6 +76,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
 
   return data as T;
+}
+
+export function getHealth(): Promise<HealthResponse> {
+  return request<HealthResponse>("/health");
 }
 
 export function getProfile(userId: number = DEMO_USER_ID): Promise<UserProfile> {

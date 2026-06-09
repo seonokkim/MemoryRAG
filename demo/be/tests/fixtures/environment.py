@@ -7,11 +7,17 @@ from app.core.database import reset_engine
 
 
 def _apply_test_env() -> None:
-    os.environ.setdefault("LLM_PROVIDER", "mock")
-    os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")
-    os.environ.setdefault("VECTOR_STORE_PROVIDER", "none")
-    os.environ.setdefault("ENABLE_MEMORY_UPDATE", "true")
-    os.environ.setdefault("ENABLE_GUARDRAIL", "true")
+    """Force isolated test env — never inherit live `.env` LLM/LangSmith settings."""
+    os.environ["LLM_PROVIDER"] = "mock"
+    os.environ["DATABASE_URL"] = "sqlite:///:memory:"
+    os.environ["VECTOR_STORE_PROVIDER"] = "none"
+    os.environ["ENABLE_MEMORY_UPDATE"] = "true"
+    os.environ["ENABLE_GUARDRAIL"] = "true"
+    os.environ["ENABLE_QUALITY_LOOP"] = "true"
+    os.environ["ENABLE_AGENT_TOOLS"] = "true"
+    os.environ["LANGSMITH_TRACING"] = "false"
+    os.environ.pop("LANGSMITH_API_KEY", None)
+    os.environ.pop("LANGCHAIN_API_KEY", None)
 
 
 _apply_test_env()

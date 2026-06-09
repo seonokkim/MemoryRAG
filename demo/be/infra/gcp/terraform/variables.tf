@@ -10,7 +10,7 @@ variable "region" {
 
 variable "artifact_repo" {
   type    = string
-  default = "memoryrag"
+  default = "memory-rag"
 }
 
 variable "gcs_bucket_name" {

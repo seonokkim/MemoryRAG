@@ -11,5 +11,12 @@ google-cloud-logging>=3.9.0,<4.0
 google-cloud-storage>=2.14.0,<3.0
 google-cloud-aiplatform>=1.38.0,<2.0
 
+# Gemini Developer API (LLM_PROVIDER=gemini_api) — first real LLM PoC
+google-genai>=1.0.0,<2.0
+
 # Optional LLM provider (LLM_PROVIDER=openai)
 openai>=1.30.0,<2.0
+
+# LangGraph Studio local debugging (langgraph dev)
+# Keep langgraph-cli[inmem] current — mismatched langgraph-api/runtime-inmem causes Submit 500.
+langgraph-cli[inmem]>=0.4.0,<0.5

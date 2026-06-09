@@ -1,8 +1,8 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: memoryrag-be-config
-  namespace: memoryrag
+  name: memory-rag-be-config
+  namespace: memory-rag
 data:
   APP_ENV: production
   API_PREFIX: /api

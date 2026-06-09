@@ -18,6 +18,10 @@ class ConversationTraceResponse(BaseModel):
     failure_type: str | None
     retrieved_sources: list[str]
     question_type: str | None = None
+    llm_provider: str | None = None
+    llm_model: str | None = None
+    quality_status: str | None = None
+    retry_count: int | None = None
     trace: dict
 
 

@@ -1,5 +1,5 @@
 [project]
-name = "memoryrag-be"
+name = "memory-rag-be"
 version = "0.1.0"
 description = "AI coaching backend with RAG, LangGraph, and long-term memory"
 readme = "README.md"

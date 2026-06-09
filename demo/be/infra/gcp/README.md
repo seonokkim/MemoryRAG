@@ -1,4 +1,4 @@
-# GCP deployment (MemoryRAG backend)
+# GCP deployment (memory-rag backend)
 
 ## Recommended production path
 

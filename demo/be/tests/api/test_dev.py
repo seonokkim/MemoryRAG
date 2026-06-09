@@ -20,3 +20,5 @@ class TestDevApi:
         )
         assert trace["conversation_id"] == chat["conversation_id"]
         assert trace["workflow"] == "coach_chat"
+        assert trace.get("llm_provider") == "mock"
+        assert trace.get("llm_model") == "mock"

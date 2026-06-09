@@ -100,5 +100,9 @@ export interface ConversationTrace {
   failure_type?: string | null;
   retrieved_sources: string[];
   question_type?: string | null;
+  llm_provider?: string | null;
+  llm_model?: string | null;
+  quality_status?: string | null;
+  retry_count?: number | null;
   trace: Record<string, unknown>;
 }

@@ -17,7 +17,7 @@ resource "google_artifact_registry_repository" "be" {
   location      = var.region
   repository_id = var.artifact_repo
   format        = "DOCKER"
-  description   = "MemoryRAG backend images"
+  description   = "memory-rag backend images"
 }
 
 resource "google_storage_bucket" "swing_assets" {

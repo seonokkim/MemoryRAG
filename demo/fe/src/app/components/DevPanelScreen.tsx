@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
-import { ChevronLeft, CheckCircle, AlertCircle, Clock, DollarSign, Database, Shield } from "lucide-react";
+import { ChevronLeft, Database, Shield } from "lucide-react";
 import {
   DEMO_CONVERSATION_KEY,
   getConversationTrace,
@@ -8,459 +8,309 @@ import {
 } from "../api/client";
 import type { ConversationTrace, PromptVersion } from "../api/types";
 
-const WORKFLOW_STEPS = [
-  {
-    step: 1,
-    label: "Question classification",
-    desc: "Classify user questions (swing analysis / progress check / drill request)",
-    model: "claude-haiku-4-5",
-    latency: "0.2s",
-    status: "pass",
-  },
-  {
-    step: 2,
-    label: "Swing history retrieval",
-    desc: "Vector search over last 10 swings and pose time-series summary",
-    model: "RAG (pgvector)",
-    latency: "0.4s",
-    status: "pass",
-  },
-  {
-    step: 3,
-    label: "Golf knowledge retrieval",
-    desc: "Search coaching knowledge base for relevant techniques and fixes",
-    model: "RAG (pgvector)",
-    latency: "0.5s",
-    status: "pass",
-  },
-  {
-    step: 4,
-    label: "Coaching response generation",
-    desc: "Generate coaching response in structured output format",
-    model: "claude-sonnet-4-6",
-    latency: "0.5s",
-    status: "pass",
-  },
-  {
-    step: 5,
-    label: "Guardrail application",
-    desc: "Block non-golf questions / validate response quality / safety filter",
-    model: "Rule-based + LLM",
-    latency: "0.2s",
-    status: "pass",
-  },
+const GRAPH_NODES: { key: string; label: string; desc: string }[] = [
+  { key: "load_context", label: "Load context", desc: "Recent messages from MySQL" },
+  { key: "classify_question", label: "Classify question", desc: "Route by question type" },
+  { key: "retrieve_profile", label: "Retrieve profile", desc: "User profile and goals" },
+  { key: "retrieve_swing_history", label: "Swing history", desc: "Recent swing sessions" },
+  { key: "retrieve_memory", label: "Long-term memory", desc: "Stored coaching memories" },
+  { key: "retrieve_knowledge", label: "Knowledge retrieval", desc: "SQL / vector knowledge chunks" },
+  { key: "invoke_tools", label: "Agent tools", desc: "Allowlisted LangChain tools" },
+  { key: "generate_answer", label: "Generate answer", desc: "Structured coaching JSON" },
+  { key: "validate_output", label: "Validate output", desc: "Pydantic schema check" },
+  { key: "evaluate_answer", label: "Quality evaluation", desc: "Confidence and grounding checks" },
+  { key: "rewrite_query", label: "Rewrite query", desc: "Quality-loop retry retrieval" },
+  { key: "fallback_answer", label: "Fallback answer", desc: "Safe response when quality fails" },
+  { key: "guardrail", label: "Guardrail", desc: "Safety and scope checks" },
+  { key: "save_messages", label: "Save messages", desc: "Persist user and assistant turns" },
+  { key: "update_memory", label: "Update memory", desc: "Extract long-term memories" },
+  { key: "log_eval", label: "Log evaluation", desc: "eval_logs row + trace metadata" },
 ];
 
-const RAG_SOURCES = [
-  { name: "Golf coaching knowledge base", docs: 2840, updated: "2024.05", topK: 5, score: 0.87 },
-  { name: "User swing history", docs: 10, updated: "Live", topK: 3, score: 0.95 },
-  { name: "Previous conversations", docs: 24, updated: "Live", topK: 5, score: 0.91 },
-];
+type Tab = "workflow" | "rag" | "quality" | "versions";
 
-const FAILURE_CASES = [
-  { case: "Insufficient swing data", action: "Default guide response + prompt to upload", freq: "Low" },
-  { case: "Ambiguous question", action: "Generate clarification question", freq: "Medium" },
-  { case: "Low RAG retrieval confidence", action: "Fallback response + show confidence", freq: "Low" },
-  { case: "Guardrail block", action: "Redirect to golf-related questions", freq: "Low" },
-];
-
-const VERSIONS = [
-  { v: "v0.3", date: "2024.06.04", change: "Structured output + stronger guardrails", current: true },
-  { v: "v0.2", date: "2024.05.20", change: "RAG source tagging added", current: false },
-  { v: "v0.1", date: "2024.05.01", change: "Initial version", current: false },
-];
+function formatPayload(payload: unknown): string {
+  if (payload == null) return "—";
+  if (typeof payload === "string") return payload;
+  try {
+    return JSON.stringify(payload, null, 2);
+  } catch {
+    return String(payload);
+  }
+}
 
 export function DevPanelScreen() {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<"workflow" | "rag" | "quality" | "versions">("workflow");
+  const [activeTab, setActiveTab] = useState<Tab>("workflow");
   const [promptVersions, setPromptVersions] = useState<PromptVersion[] | null>(null);
+  const [versionsError, setVersionsError] = useState<string | null>(null);
   const [trace, setTrace] = useState<ConversationTrace | null>(null);
+  const [traceError, setTraceError] = useState<string | null>(null);
 
   useEffect(() => {
     getPromptVersions()
-      .then(setPromptVersions)
-      .catch(() => setPromptVersions(null));
+      .then(rows => {
+        setPromptVersions(rows);
+        setVersionsError(null);
+      })
+      .catch(() => {
+        setPromptVersions([]);
+        setVersionsError("Could not load prompt versions from /api/dev/prompt-versions");
+      });
   }, []);
 
   useEffect(() => {
     const raw = sessionStorage.getItem(DEMO_CONVERSATION_KEY);
-    if (!raw) return;
+    if (!raw) {
+      setTrace(null);
+      setTraceError("No coach conversation in this session — send a message on the Coach screen first.");
+      return;
+    }
     getConversationTrace(Number(raw))
-      .then(setTrace)
-      .catch(() => setTrace(null));
+      .then(row => {
+        setTrace(row);
+        setTraceError(null);
+      })
+      .catch(() => {
+        setTrace(null);
+        setTraceError(`Could not load trace for conversation #${raw}`);
+      });
   }, []);
 
-  const versionRows =
-    promptVersions?.map(pv => ({
-      v: pv.version,
-      date: pv.created_at.slice(0, 10),
-      change: `${pv.name}${pv.is_active ? " (active)" : ""}`,
-      current: pv.is_active,
-    })) ?? VERSIONS;
+  const workflowSteps = useMemo(() => {
+    const nodeTrace = trace?.trace ?? {};
+    return GRAPH_NODES.filter(node => node.key in nodeTrace).map(node => ({
+      ...node,
+      payload: nodeTrace[node.key],
+    }));
+  }, [trace]);
 
-  const workflowBanner = trace
-    ? `LangGraph trace · conversation #${trace.conversation_id} · ${trace.prompt_version} · ${trace.latency_ms ?? "—"}ms`
-    : "Full pipeline healthy · total latency 1.8s · prompt v0.3 (mock workflow)";
+  const llmLabel = trace?.llm_provider
+    ? `${trace.llm_provider}${trace.llm_model ? ` · ${trace.llm_model}` : ""}`
+    : "—";
 
   return (
-    <div className="flex flex-col min-h-full bg-[#0A0F1C]">
-      {/* Header */}
-      <div style={{ background: "#0A0F1C", padding: "52px 20px 20px" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 8 }}>
+    <div className="flex min-h-full flex-col bg-[#0A0F1C]">
+      <div className="px-5 pb-5 pt-[52px]">
+        <div className="mb-3 flex items-center gap-3">
           <button
+            type="button"
             onClick={() => navigate("/coach")}
-            style={{ background: "rgba(255,255,255,0.08)", border: "none", borderRadius: 10, padding: "6px", cursor: "pointer" }}
+            className="cursor-pointer rounded-[10px] border-0 bg-white/10 p-1.5"
           >
             <ChevronLeft size={18} color="#94A3B8" />
           </button>
           <div>
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <h1 style={{ color: "#F8FAFC", fontSize: 18, fontWeight: 700 }}>AI quality panel</h1>
-              <span style={{
-                background: "#1E3A5F",
-                color: "#60A5FA",
-                fontSize: 9, fontWeight: 700,
-                padding: "2px 7px", borderRadius: 8,
-              }}>DEV</span>
+            <div className="flex items-center gap-2">
+              <h1 className="text-lg font-bold text-[#F8FAFC]">Coach debug panel</h1>
+              <span className="rounded-lg bg-[#1E3A5F] px-1.5 py-0.5 text-[9px] font-bold text-[#60A5FA]">
+                DEV
+              </span>
             </div>
-            <p style={{ color: "#475569", fontSize: 11, marginTop: 2 }}>AI/LLM Engineer Debug View</p>
+            <p className="mt-0.5 text-[11px] text-[#475569]">
+              LangGraph trace and prompt versions from the FastAPI backend
+            </p>
           </div>
         </div>
 
-        {/* System metrics */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 6, marginTop: 12 }}>
+        <div className="mt-3 grid grid-cols-2 gap-1.5 sm:grid-cols-4">
           {[
-            { icon: Clock, label: "Latency", value: "1.8s", color: "#34D399" },
-            { icon: DollarSign, label: "Cost", value: "Low", color: "#60A5FA" },
-            { icon: Database, label: "Cache", value: "On", color: "#A78BFA" },
-            { icon: Shield, label: "Guardrail", value: "Pass", color: "#34D399" },
-          ].map(({ icon: Icon, label, value, color }) => (
-            <div key={label} style={{
-              background: "rgba(255,255,255,0.04)",
-              borderRadius: 10,
-              padding: "10px 8px",
-              textAlign: "center",
-              border: "1px solid rgba(255,255,255,0.08)",
-            }}>
-              <Icon size={14} color={color} style={{ margin: "0 auto 4px" }} />
-              <p style={{ color, fontSize: 12, fontWeight: 700 }}>{value}</p>
-              <p style={{ color: "#475569", fontSize: 9, marginTop: 1 }}>{label}</p>
+            { label: "Latency", value: trace?.latency_ms != null ? `${trace.latency_ms}ms` : "—" },
+            { label: "LLM", value: llmLabel },
+            { label: "Chunks", value: trace ? String(trace.retrieved_chunk_count) : "—" },
+            {
+              label: "Guardrail",
+              value: trace?.guardrail_status ?? "—",
+            },
+          ].map(({ label, value }) => (
+            <div
+              key={label}
+              className="rounded-[10px] border border-white/10 bg-white/5 px-2 py-2.5 text-center"
+            >
+              <p className="truncate text-[11px] font-bold text-[#34D399]">{value}</p>
+              <p className="mt-0.5 text-[9px] text-[#475569]">{label}</p>
             </div>
           ))}
         </div>
       </div>
 
-      {/* Tabs */}
-      <div style={{
-        display: "flex",
-        background: "rgba(255,255,255,0.04)",
-        borderBottom: "1px solid rgba(255,255,255,0.08)",
-        padding: "0 16px",
-        overflowX: "auto",
-        gap: 2,
-      }}>
-        {(["workflow", "rag", "quality", "versions"] as const).map(tab => (
+      <div className="flex gap-0.5 overflow-x-auto border-b border-white/10 bg-white/5 px-4">
+        {(
+          [
+            ["workflow", "Workflow"],
+            ["rag", "Retrieval"],
+            ["quality", "Quality"],
+            ["versions", "Versions"],
+          ] as const
+        ).map(([tab, label]) => (
           <button
             key={tab}
+            type="button"
             onClick={() => setActiveTab(tab)}
+            className="cursor-pointer border-0 bg-transparent px-3.5 py-2.5 text-xs whitespace-nowrap"
             style={{
-              background: "none",
-              border: "none",
-              padding: "10px 14px",
-              fontSize: 12,
               fontWeight: activeTab === tab ? 700 : 400,
               color: activeTab === tab ? "#34D399" : "#475569",
-              cursor: "pointer",
               borderBottom: activeTab === tab ? "2px solid #34D399" : "2px solid transparent",
-              whiteSpace: "nowrap",
             }}
           >
-            {tab === "workflow" ? "Workflow" : tab === "rag" ? "RAG sources" : tab === "quality" ? "Quality log" : "Versions"}
+            {label}
           </button>
         ))}
       </div>
 
-      <div style={{ padding: "16px", flex: 1, overflowY: "auto", paddingBottom: 32 }}>
-
-        {/* Workflow tab */}
+      <div className="flex-1 overflow-y-auto px-4 py-4 pb-8">
         {activeTab === "workflow" && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            <div style={{
-              background: "rgba(52,211,153,0.08)",
-              borderRadius: 10,
-              padding: "10px 12px",
-              border: "1px solid rgba(52,211,153,0.2)",
-              marginBottom: 4,
-            }}>
-              <p style={{ color: "#34D399", fontSize: 11, lineHeight: 1.5 }}>{workflowBanner}</p>
-              {trace && (
-                <p style={{ color: "#64748B", fontSize: 10, marginTop: 6, lineHeight: 1.4 }}>
-                  Q: {trace.question_type ?? "—"} · chunks: {trace.retrieved_chunk_count} · guardrail:{" "}
-                  {trace.guardrail_status ?? "—"}
+          <div className="flex flex-col gap-2">
+            {trace ? (
+              <div className="mb-1 rounded-[10px] border border-emerald-500/20 bg-emerald-500/10 px-3 py-2.5">
+                <p className="text-[11px] leading-relaxed text-[#34D399]">
+                  Conversation #{trace.conversation_id} · {trace.workflow} · prompt{" "}
+                  {trace.prompt_version}
+                  {trace.question_type ? ` · ${trace.question_type}` : ""}
                 </p>
-              )}
-            </div>
-            {WORKFLOW_STEPS.map(({ step, label, desc, model, latency, status }) => (
-              <div key={step} style={{
-                background: "rgba(255,255,255,0.04)",
-                borderRadius: 12,
-                padding: "12px",
-                border: "1px solid rgba(255,255,255,0.08)",
-              }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
-                  <div style={{
-                    width: 22, height: 22, borderRadius: 11,
-                    background: "#1E3A5F",
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    flexShrink: 0,
-                  }}>
-                    <span style={{ color: "#60A5FA", fontSize: 10, fontWeight: 700 }}>{step}</span>
-                  </div>
-                  <span style={{ color: "#F1F5F9", fontSize: 13, fontWeight: 600 }}>{label}</span>
-                  <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6 }}>
-                    <span style={{ color: "#475569", fontSize: 10 }}>{latency}</span>
-                    <CheckCircle size={13} color="#34D399" />
-                  </div>
-                </div>
-                <p style={{ color: "#64748B", fontSize: 11, lineHeight: 1.5, marginLeft: 32 }}>{desc}</p>
-                <div style={{ marginLeft: 32, marginTop: 5 }}>
-                  <span style={{
-                    background: "rgba(96,165,250,0.1)",
-                    color: "#60A5FA",
-                    fontSize: 9, fontWeight: 600,
-                    padding: "2px 7px", borderRadius: 6,
-                    border: "1px solid rgba(96,165,250,0.2)",
-                  }}>{model}</span>
-                </div>
+              </div>
+            ) : (
+              <p className="text-[11px] text-[#94A3B8]">{traceError}</p>
+            )}
+
+            {workflowSteps.length === 0 && trace && (
+              <p className="text-[11px] text-[#64748B]">No per-node trace payload on this conversation.</p>
+            )}
+
+            {workflowSteps.map(({ key, label, desc, payload }) => (
+              <div
+                key={key}
+                className="rounded-xl border border-white/10 bg-white/5 p-3"
+              >
+                <p className="text-[13px] font-semibold text-[#F1F5F9]">{label}</p>
+                <p className="mt-1 text-[11px] text-[#64748B]">{desc}</p>
+                <pre className="mt-2 overflow-x-auto rounded-lg bg-black/30 p-2 font-mono text-[10px] leading-relaxed text-[#94A3B8]">
+                  {formatPayload(payload)}
+                </pre>
               </div>
             ))}
-
-            {/* Latency breakdown */}
-            <div style={{
-              background: "rgba(255,255,255,0.04)",
-              borderRadius: 12,
-              padding: "12px",
-              border: "1px solid rgba(255,255,255,0.08)",
-              marginTop: 4,
-            }}>
-              <p style={{ color: "#94A3B8", fontSize: 11, fontWeight: 700, marginBottom: 8 }}>Latency breakdown</p>
-              {WORKFLOW_STEPS.map(({ step, label, latency }) => (
-                <div key={step} style={{ marginBottom: 6 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
-                    <span style={{ color: "#64748B", fontSize: 10 }}>{label}</span>
-                    <span style={{ color: "#94A3B8", fontSize: 10 }}>{latency}</span>
-                  </div>
-                  <div style={{ height: 4, background: "rgba(255,255,255,0.06)", borderRadius: 2 }}>
-                    <div style={{
-                      height: "100%",
-                      width: `${(parseFloat(latency) / 1.8) * 100}%`,
-                      background: "#34D399",
-                      borderRadius: 2,
-                    }} />
-                  </div>
-                </div>
-              ))}
-            </div>
           </div>
         )}
 
-        {/* RAG tab */}
         {activeTab === "rag" && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {RAG_SOURCES.map(({ name, docs, updated, topK, score }) => (
-              <div key={name} style={{
-                background: "rgba(255,255,255,0.04)",
-                borderRadius: 12,
-                padding: "14px",
-                border: "1px solid rgba(255,255,255,0.08)",
-              }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-                  <Database size={14} color="#A78BFA" />
-                  <span style={{ color: "#F1F5F9", fontSize: 13, fontWeight: 600 }}>{name}</span>
-                </div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6 }}>
-                  {[
-                    { label: "Documents", value: `${docs}` },
-                    { label: "Updated", value: updated },
-                    { label: "Top-K", value: `${topK}` },
-                  ].map(({ label, value }) => (
-                    <div key={label} style={{
-                      background: "rgba(255,255,255,0.04)",
-                      borderRadius: 8,
-                      padding: "7px",
-                      textAlign: "center",
-                    }}>
-                      <p style={{ color: "#94A3B8", fontSize: 9 }}>{label}</p>
-                      <p style={{ color: "#F1F5F9", fontSize: 12, fontWeight: 600, marginTop: 2 }}>{value}</p>
-                    </div>
-                  ))}
-                </div>
-                <div style={{ marginTop: 8 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
-                    <span style={{ color: "#64748B", fontSize: 10 }}>Avg. similarity score</span>
-                    <span style={{ color: "#34D399", fontSize: 10, fontWeight: 600 }}>{score}</span>
+          <div className="flex flex-col gap-2">
+            {!trace ? (
+              <p className="text-[11px] text-[#94A3B8]">{traceError}</p>
+            ) : (
+              <>
+                <div className="rounded-xl border border-white/10 bg-white/5 p-3.5">
+                  <div className="mb-2 flex items-center gap-2">
+                    <Database size={14} color="#A78BFA" />
+                    <span className="text-[13px] font-semibold text-[#F1F5F9]">Retrieved sources</span>
                   </div>
-                  <div style={{ height: 5, background: "rgba(255,255,255,0.06)", borderRadius: 3 }}>
-                    <div style={{
-                      height: "100%",
-                      width: `${score * 100}%`,
-                      background: score > 0.9 ? "#34D399" : "#60A5FA",
-                      borderRadius: 3,
-                    }} />
-                  </div>
-                </div>
-              </div>
-            ))}
-
-            {/* Prompt snippet */}
-            <div style={{
-              background: "rgba(255,255,255,0.04)",
-              borderRadius: 12,
-              padding: "14px",
-              border: "1px solid rgba(255,255,255,0.08)",
-            }}>
-              <p style={{ color: "#94A3B8", fontSize: 11, fontWeight: 700, marginBottom: 8 }}>
-                System prompt preview (v0.3)
-              </p>
-              <pre style={{
-                color: "#64748B",
-                fontSize: 10,
-                lineHeight: 1.7,
-                overflowX: "auto",
-                whiteSpace: "pre-wrap",
-                fontFamily: "monospace",
-              }}>{`You are an AI swing coach.
-Use the user's swing history, golfer profile,
-and golf coaching knowledge to deliver
-personalized coaching.
-
-[Output Format]
-{
-  "cause": "root cause",
-  "fix": "correction focus",
-  "drill": "recommended drill",
-  "effect": "expected improvement"
-}
-
-[Guardrail]
-- Non-golf topics: refuse
-- Low confidence: disclose`}</pre>
-            </div>
-          </div>
-        )}
-
-        {/* Quality tab */}
-        {activeTab === "quality" && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            <div style={{ background: "rgba(255,255,255,0.04)", borderRadius: 12, padding: "14px", border: "1px solid rgba(255,255,255,0.08)" }}>
-              <p style={{ color: "#94A3B8", fontSize: 11, fontWeight: 700, marginBottom: 10 }}>Failure case log</p>
-              {FAILURE_CASES.map(({ case: c, action, freq }) => (
-                <div key={c} style={{
-                  borderBottom: "1px solid rgba(255,255,255,0.06)",
-                  padding: "10px 0",
-                }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
-                    <AlertCircle size={12} color="#F59E0B" />
-                    <span style={{ color: "#F1F5F9", fontSize: 12, fontWeight: 600 }}>{c}</span>
-                    <span style={{
-                      marginLeft: "auto",
-                      background: freq === "Low" ? "rgba(52,211,153,0.15)" : "rgba(245,158,11,0.15)",
-                      color: freq === "Low" ? "#34D399" : "#F59E0B",
-                      fontSize: 9, fontWeight: 600,
-                      padding: "1px 6px", borderRadius: 6,
-                    }}>{freq}</span>
-                  </div>
-                  <p style={{ color: "#64748B", fontSize: 11, lineHeight: 1.5, marginLeft: 18 }}>→ {action}</p>
-                </div>
-              ))}
-            </div>
-
-            {/* Feedback loop */}
-            <div style={{ background: "rgba(255,255,255,0.04)", borderRadius: 12, padding: "14px", border: "1px solid rgba(255,255,255,0.08)" }}>
-              <p style={{ color: "#94A3B8", fontSize: 11, fontWeight: 700, marginBottom: 10 }}>Feedback loop</p>
-              {[
-                { label: "Helpful", count: 18, total: 24, color: "#34D399" },
-                { label: "Not accurate", count: 6, total: 24, color: "#F87171" },
-              ].map(({ label, count, total, color }) => (
-                <div key={label} style={{ marginBottom: 10 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                    <span style={{ color: "#94A3B8", fontSize: 11 }}>{label}</span>
-                    <span style={{ color, fontSize: 11, fontWeight: 600 }}>{count}/{total}</span>
-                  </div>
-                  <div style={{ height: 6, background: "rgba(255,255,255,0.06)", borderRadius: 3 }}>
-                    <div style={{
-                      height: "100%",
-                      width: `${(count / total) * 100}%`,
-                      background: color,
-                      borderRadius: 3,
-                    }} />
-                  </div>
-                </div>
-              ))}
-              <div style={{ marginTop: 10, padding: "10px", background: "rgba(255,255,255,0.04)", borderRadius: 8 }}>
-                <p style={{ color: "#64748B", fontSize: 11, lineHeight: 1.5 }}>
-                  Adjusting re-ranking weights from negative feedback<br />
-                  Prompt A/B test: v0.3 win rate 75%
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Versions tab */}
-        {activeTab === "versions" && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {versionRows.map(({ v, date, change, current }) => (
-              <div key={v} style={{
-                background: current ? "rgba(52,211,153,0.06)" : "rgba(255,255,255,0.04)",
-                borderRadius: 12,
-                padding: "14px",
-                border: `1px solid ${current ? "rgba(52,211,153,0.3)" : "rgba(255,255,255,0.08)"}`,
-              }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-                  <span style={{
-                    background: current ? "#34D399" : "rgba(255,255,255,0.1)",
-                    color: current ? "#0A0F1C" : "#64748B",
-                    fontSize: 11, fontWeight: 700,
-                    padding: "2px 8px", borderRadius: 8,
-                  }}>{v}</span>
-                  {current && (
-                    <span style={{ color: "#34D399", fontSize: 10, fontWeight: 600 }}>Current</span>
+                  {trace.retrieved_sources.length === 0 ? (
+                    <p className="text-[11px] text-[#64748B]">No sources recorded for this turn.</p>
+                  ) : (
+                    <ul className="list-inside list-disc text-[11px] text-[#CBD5E1]">
+                      {trace.retrieved_sources.map(source => (
+                        <li key={source}>{source}</li>
+                      ))}
+                    </ul>
                   )}
-                  <span style={{ color: "#475569", fontSize: 10, marginLeft: "auto" }}>{date}</span>
+                  <p className="mt-3 text-[10px] text-[#64748B]">
+                    Knowledge chunks retrieved: {trace.retrieved_chunk_count}
+                  </p>
                 </div>
-                <p style={{ color: current ? "#CBD5E1" : "#64748B", fontSize: 12, lineHeight: 1.5 }}>{change}</p>
-              </div>
-            ))}
 
-            <div style={{
-              background: "rgba(255,255,255,0.04)",
-              borderRadius: 12,
-              padding: "14px",
-              border: "1px solid rgba(255,255,255,0.08)",
-            }}>
-              <p style={{ color: "#94A3B8", fontSize: 11, fontWeight: 700, marginBottom: 8 }}>Cache status</p>
-              {[
-                { label: "Prompt cache", status: "Enabled", detail: "Anthropic Prompt Caching" },
-                { label: "RAG result cache", status: "Enabled", detail: "TTL: 5 min" },
-                { label: "Embedding cache", status: "Enabled", detail: "pgvector persistent storage" },
-              ].map(({ label, status, detail }) => (
-                <div key={label} style={{
-                  display: "flex", alignItems: "center", justifyContent: "space-between",
-                  padding: "7px 0",
-                  borderBottom: "1px solid rgba(255,255,255,0.04)",
-                }}>
-                  <div>
-                    <p style={{ color: "#F1F5F9", fontSize: 12 }}>{label}</p>
-                    <p style={{ color: "#475569", fontSize: 10 }}>{detail}</p>
+                {"retrieve_knowledge" in (trace.trace ?? {}) && (
+                  <div className="rounded-xl border border-white/10 bg-white/5 p-3.5">
+                    <p className="mb-2 text-[11px] font-bold text-[#94A3B8]">retrieve_knowledge payload</p>
+                    <pre className="overflow-x-auto font-mono text-[10px] leading-relaxed text-[#64748B]">
+                      {formatPayload(trace.trace.retrieve_knowledge)}
+                    </pre>
                   </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                    <div style={{ width: 6, height: 6, borderRadius: 3, background: "#34D399" }} />
-                    <span style={{ color: "#34D399", fontSize: 11 }}>{status}</span>
-                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
+
+        {activeTab === "quality" && (
+          <div className="flex flex-col gap-2">
+            {!trace ? (
+              <p className="text-[11px] text-[#94A3B8]">{traceError}</p>
+            ) : (
+              <div className="rounded-xl border border-white/10 bg-white/5 p-3.5">
+                <div className="mb-3 flex items-center gap-2">
+                  <Shield size={14} color="#34D399" />
+                  <span className="text-[13px] font-semibold text-[#F1F5F9]">Quality and guardrails</span>
                 </div>
-              ))}
-            </div>
+                {[
+                  ["Quality status", trace.quality_status ?? "—"],
+                  ["Guardrail", trace.guardrail_status ?? "—"],
+                  ["Failure type", trace.failure_type ?? "—"],
+                  ["Retries", trace.retry_count != null ? String(trace.retry_count) : "—"],
+                ].map(([label, value]) => (
+                  <div
+                    key={label}
+                    className="flex justify-between border-b border-white/5 py-2 text-[11px] last:border-0"
+                  >
+                    <span className="text-[#64748B]">{label}</span>
+                    <span className="font-semibold text-[#F1F5F9]">{value}</span>
+                  </div>
+                ))}
+
+                {"evaluate_answer" in (trace.trace ?? {}) && (
+                  <pre className="mt-3 overflow-x-auto rounded-lg bg-black/30 p-2 font-mono text-[10px] text-[#94A3B8]">
+                    {formatPayload(trace.trace.evaluate_answer)}
+                  </pre>
+                )}
+                {"guardrail" in (trace.trace ?? {}) && (
+                  <pre className="mt-2 overflow-x-auto rounded-lg bg-black/30 p-2 font-mono text-[10px] text-[#94A3B8]">
+                    {formatPayload(trace.trace.guardrail)}
+                  </pre>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === "versions" && (
+          <div className="flex flex-col gap-2">
+            {versionsError && (
+              <p className="text-[11px] text-amber-400/90">{versionsError}</p>
+            )}
+            {promptVersions === null ? (
+              <p className="text-[11px] text-[#64748B]">Loading prompt versions…</p>
+            ) : promptVersions.length === 0 ? (
+              <p className="text-[11px] text-[#64748B]">No prompt versions returned from the API.</p>
+            ) : (
+              promptVersions.map(pv => (
+                <div
+                  key={pv.version}
+                  className="rounded-xl border p-3.5"
+                  style={{
+                    background: pv.is_active ? "rgba(52,211,153,0.06)" : "rgba(255,255,255,0.04)",
+                    borderColor: pv.is_active ? "rgba(52,211,153,0.3)" : "rgba(255,255,255,0.08)",
+                  }}
+                >
+                  <div className="mb-1.5 flex items-center gap-2">
+                    <span
+                      className="rounded-lg px-2 py-0.5 text-[11px] font-bold"
+                      style={{
+                        background: pv.is_active ? "#34D399" : "rgba(255,255,255,0.1)",
+                        color: pv.is_active ? "#0A0F1C" : "#64748B",
+                      }}
+                    >
+                      {pv.version}
+                    </span>
+                    {pv.is_active && (
+                      <span className="text-[10px] font-semibold text-[#34D399]">Active</span>
+                    )}
+                    <span className="ml-auto text-[10px] text-[#475569]">
+                      {pv.created_at.slice(0, 10)}
+                    </span>
+                  </div>
+                  <p className="text-xs leading-relaxed text-[#CBD5E1]">{pv.name}</p>
+                </div>
+              ))
+            )}
           </div>
         )}
       </div>

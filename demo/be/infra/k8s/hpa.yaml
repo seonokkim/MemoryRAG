@@ -1,13 +1,13 @@
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
-  name: memoryrag-be
-  namespace: memoryrag
+  name: memory-rag-be
+  namespace: memory-rag
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
     kind: Deployment
-    name: memoryrag-be
+    name: memory-rag-be
   minReplicas: 2
   maxReplicas: 8
   metrics:

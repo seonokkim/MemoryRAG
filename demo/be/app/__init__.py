@@ -1,1 +1,1 @@
-"""MemoryRAG backend application package."""
+"""memory-rag backend application package."""

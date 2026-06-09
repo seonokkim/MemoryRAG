@@ -11,10 +11,12 @@ Demo stack for an AI golf swing coach: a FastAPI backend with long-term memory a
 
 | Path | Role |
 |------|------|
-| [demo/be](demo/be) | API, LangGraph coach workflow, MySQL |
-| [demo/fe](demo/fe) | Demo UI (talks to the API on port 8000) |
+| [demo/be](demo/be) | API, 16-node LangGraph coach workflow (quality loop + tools), MySQL |
+| [demo/fe](demo/fe) | Demo UI — dev server proxies `/api` to the backend on port 8000 |
 
 Local development runs without cloud API keys. Defaults use a mock LLM and SQL-only retrieval (`LLM_PROVIDER=mock`, `VECTOR_STORE_PROVIDER=none`).
+
+More detail: [demo/be/README.md](demo/be/README.md) · [demo/fe/README.md](demo/fe/README.md)
 
 ## Prerequisites
 
@@ -26,45 +28,48 @@ Local development runs without cloud API keys. Defaults use a mock LLM and SQL-o
 
 ### 1. Database (MySQL)
 
-```powershell
+```bash
 cd demo/be/infra/docker
+cp .env.example .env   # set local passwords (gitignored)
 docker compose up -d
 ```
 
-MySQL listens on `localhost:3306` with database `memoryrag` and credentials `memoryrag` / `memoryrag`.
+MySQL listens on `localhost:3306`; database and credentials are in `infra/docker/.env` (see `.env.example`).
 
 ### 2. Backend
 
-```powershell
+```bash
 cd demo/be
-copy .env.example .env
+cp .env.example .env   # DB_PASSWORD must match MYSQL_PASSWORD in infra/docker/.env
 
 python -m venv .venv
-.\.venv\Scripts\activate
+source .venv/bin/activate   # Windows: .\.venv\Scripts\activate
 pip install -r requirements.txt
 
-$env:PYTHONPATH="."
+export PYTHONPATH=.         # Windows: $env:PYTHONPATH="."
 alembic upgrade head
 python scripts/seed_demo_data.py
 ```
 
 Seed creates demo user **Riley** (`user_id=1` in a fresh database).
 
+**No Docker?** Use SQLite instead — see [demo/be/scripts/setup_sqlite_local.py](demo/be/scripts/setup_sqlite_local.py).
+
 ### 3. Frontend
 
-```powershell
+```bash
 cd demo/fe
 pnpm install
 ```
 
-Optional: create `demo/fe/.env.local` to override defaults:
+In dev, Vite proxies `/api` → `http://127.0.0.1:8000`, so you usually do **not** need a `.env.local` file.
+
+Optional overrides in `demo/fe/.env.local`:
 
 ```env
 VITE_API_BASE_URL=http://localhost:8000
 VITE_DEMO_USER_ID=1
 ```
-
-If you skip this file, the app uses the same defaults.
 
 ## Run the servers
 
@@ -72,23 +77,24 @@ Use two terminals. Start the backend first so the UI can reach it.
 
 **Terminal 1 — API (port 8000)**
 
-```powershell
+```bash
 cd demo/be
-.\.venv\Scripts\activate
-$env:PYTHONPATH="."
+source .venv/bin/activate
+export PYTHONPATH=.
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-Shortcut (creates `.env` from the example if missing):
+Shortcut (creates `.env` from the example if missing on Windows):
 
-```powershell
+```bash
 cd demo/be
-.\scripts\run_local.ps1
+./scripts/run_local.sh          # macOS / Linux
+# .\scripts\run_local.ps1       # Windows PowerShell
 ```
 
 **Terminal 2 — UI (port 5173)**
 
-```powershell
+```bash
 cd demo/fe
 pnpm dev
 ```
@@ -101,17 +107,28 @@ pnpm dev
 
 Quick check:
 
-```powershell
+```bash
 curl http://localhost:8000/api/health
 ```
+
+## Optional next steps
+
+| Goal | Where to look |
+|------|----------------|
+| Real LLM (Gemini API key) | `LLM_PROVIDER=gemini_api` in [demo/be/.env.example](demo/be/.env.example) · `scripts/smoke_gemini_chat.py` |
+| Vertex AI Gemini (GCP) | [demo/be/README.md](demo/be/README.md#real-llm-demo-mode-vertex-gemini) |
+| LangGraph Studio / LangSmith tracing | [demo/be/docs/langgraph_studio_setup.md](demo/be/docs/langgraph_studio_setup.md) |
+| Live E2E (FE + BE running) | `pnpm test:e2e:stack` in `demo/fe` |
+| GCP deploy checklist | [demo/be/docs/manual_setup_later.md](demo/be/docs/manual_setup_later.md) |
 
 ## Troubleshooting
 
 | Symptom | What to check |
 |---------|----------------|
 | API cannot connect to MySQL | `docker compose ps` in `demo/be/infra/docker`; port 3306 free |
-| UI shows API errors | Backend running on 8000; `VITE_API_BASE_URL` in `.env.local` if set |
+| UI shows API errors | Backend running on 8000; in dev, requests should go through the Vite proxy (`/api`) |
 | Empty or missing user data | Run `python scripts/seed_demo_data.py` from `demo/be` |
 | Schema out of date | `alembic upgrade head` with `PYTHONPATH=.` set |
+| No Docker available | `DATABASE_URL=sqlite:///./data/local.db` + `python scripts/setup_sqlite_local.py` |
 
 Reset demo data (destructive): `python scripts/reset_db.py` then seed again. See [demo/be/README.md](demo/be/README.md).

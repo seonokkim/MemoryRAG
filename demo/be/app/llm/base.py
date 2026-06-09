@@ -7,6 +7,14 @@ from app.schemas.coach import StructuredCoachingOutput
 class BaseLLMClient(ABC):
     """LLM provider contract. LangGraph nodes call sync helpers; HTTP/async callers use async methods."""
 
+    @property
+    def provider_name(self) -> str:
+        return "unknown"
+
+    @property
+    def model_name(self) -> str:
+        return ""
+
     @abstractmethod
     def classify_question_sync(self, message: str, context: dict[str, Any]) -> str:
         ...

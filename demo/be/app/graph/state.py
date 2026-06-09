@@ -23,3 +23,10 @@ class CoachState(TypedDict, total=False):
     assistant_message_id: int
     retrieved_sources: list[str]
     prompt_version: str
+    llm_provider: str
+    llm_model: str
+    retry_count: int
+    quality_status: str
+    quality_reasons: list[str]
+    rewritten_query: str
+    tool_results: dict[str, Any]

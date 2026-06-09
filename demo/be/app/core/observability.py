@@ -34,7 +34,11 @@ def configure_langsmith(settings: Settings) -> None:
     if not settings.langsmith_tracing:
         os.environ["LANGSMITH_TRACING"] = "false"
         os.environ["LANGCHAIN_TRACING_V2"] = "false"
-        for name in ("LANGSMITH_API_KEY", "LANGCHAIN_API_KEY"):
+        for name in (
+            "LANGSMITH_API_KEY",
+            "LANGCHAIN_API_KEY",
+            "LANGCHAIN_ENDPOINT",
+        ):
             os.environ.pop(name, None)
         logger.debug("LangSmith tracing disabled (LANGSMITH_TRACING=false)")
         return
@@ -49,16 +53,19 @@ def configure_langsmith(settings: Settings) -> None:
         )
         return
 
+    endpoint = settings.langsmith_endpoint.rstrip("/")
     os.environ["LANGSMITH_TRACING"] = "true"
     os.environ["LANGSMITH_API_KEY"] = api_key
     os.environ["LANGSMITH_PROJECT"] = settings.langsmith_project
-    os.environ["LANGSMITH_ENDPOINT"] = settings.langsmith_endpoint
+    os.environ["LANGSMITH_ENDPOINT"] = endpoint
     os.environ["LANGCHAIN_TRACING_V2"] = "true"
     os.environ["LANGCHAIN_API_KEY"] = api_key
     os.environ["LANGCHAIN_PROJECT"] = settings.langsmith_project
+    os.environ["LANGCHAIN_ENDPOINT"] = endpoint
     logger.info(
-        "LangSmith tracing enabled for project=%s",
+        "LangSmith tracing enabled: project=%s endpoint=%s",
         settings.langsmith_project,
+        endpoint,
     )
 
 
@@ -68,12 +75,14 @@ def build_coach_workflow_invoke_config(
     user_id: int,
     conversation_id: int,
     question_type: str | None = None,
+    llm_model: str | None = None,
 ) -> dict[str, Any]:
     """LangGraph invoke config: thread id, run name, and metadata for optional LangSmith."""
     metadata: dict[str, Any] = {
         "user_id": user_id,
         "conversation_id": conversation_id,
         "llm_provider": settings.llm_provider,
+        "llm_model": llm_model or "",
         "vector_store_provider": settings.vector_store_provider,
         "prompt_version": settings.active_prompt_version,
         "langsmith_tracing": settings.langsmith_tracing,
@@ -83,6 +92,6 @@ def build_coach_workflow_invoke_config(
 
     return {
         "configurable": {"thread_id": str(conversation_id)},
-        "run_name": "MemoryRAG-coach-workflow",
+        "run_name": "memory-rag-coach-workflow",
         "metadata": metadata,
     }

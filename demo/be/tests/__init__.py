@@ -1,1 +1,1 @@
-"""Test package for MemoryRAG backend."""
+"""Test package for memory-rag backend."""

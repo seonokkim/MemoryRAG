@@ -8,6 +8,14 @@ from app.schemas.coach import StructuredCoachingOutput
 class MockLLMClient(BaseLLMClient):
     """Deterministic local LLM; no API keys required."""
 
+    @property
+    def provider_name(self) -> str:
+        return "mock"
+
+    @property
+    def model_name(self) -> str:
+        return "mock"
+
     def classify_question_sync(self, message: str, context: dict[str, Any]) -> str:
         return classify_by_keywords(message)
 

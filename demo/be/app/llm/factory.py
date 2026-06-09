@@ -8,6 +8,10 @@ def get_llm_client(settings: Settings | None = None) -> BaseLLMClient:
     provider = cfg.llm_provider
     if provider == "mock":
         return MockLLMClient()
+    if provider == "gemini_api":
+        from app.llm.gemini_api_client import GeminiAPIClient
+
+        return GeminiAPIClient(cfg)
     if provider == "vertex":
         from app.llm.vertex_ai_client import VertexAIClient
 

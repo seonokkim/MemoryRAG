@@ -75,7 +75,7 @@ export function HomeScreen() {
           setSessions(s);
         }
       } catch {
-        /* keep inline mock fallbacks */
+        // Demo charts fall back to inline sample data when the API is down.
       } finally {
         if (!cancelled) setLoading(false);
       }

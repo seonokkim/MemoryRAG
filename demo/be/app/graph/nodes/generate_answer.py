@@ -9,6 +9,7 @@ def generate_answer(state: CoachState, llm: BaseLLMClient) -> dict:
         "long_term_memories": state.get("long_term_memories"),
         "golf_knowledge_chunks": state.get("golf_knowledge_chunks"),
         "messages": state.get("messages"),
+        "tool_results": state.get("tool_results"),
     }
     structured = llm.generate_structured_answer_sync(
         state["user_message"],

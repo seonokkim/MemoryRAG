@@ -117,18 +117,59 @@ curl http://localhost:8000/api/health
 |------|----------------|
 | Real LLM (Gemini API key) | `LLM_PROVIDER=gemini_api` in [demo/be/.env.example](demo/be/.env.example) · `scripts/smoke_gemini_chat.py` |
 | Vertex AI Gemini (GCP) | [demo/be/README.md](demo/be/README.md#real-llm-demo-mode-vertex-gemini) |
-| LangGraph Studio / LangSmith tracing | [demo/be/docs/langgraph_studio_setup.md](demo/be/docs/langgraph_studio_setup.md) |
+| LangGraph Studio / LangSmith tracing | [LangGraph / LangSmith (optional)](#langgraph--langsmith-optional) below |
 | Live E2E (FE + BE running) | `pnpm test:e2e:stack` in `demo/fe` |
 | GCP deploy checklist | [demo/be/docs/manual_setup_later.md](demo/be/docs/manual_setup_later.md) |
 
-## Troubleshooting
+## LangGraph / LangSmith (optional)
 
-| Symptom | What to check |
-|---------|----------------|
-| API cannot connect to MySQL | `docker compose ps` in `demo/be/infra/docker`; port 3306 free |
-| UI shows API errors | Backend running on 8000; in dev, requests should go through the Vite proxy (`/api`) |
-| Empty or missing user data | Run `python scripts/seed_demo_data.py` from `demo/be` |
-| Schema out of date | `alembic upgrade head` with `PYTHONPATH=.` set |
-| No Docker available | `DATABASE_URL=sqlite:///./data/local.db` + `python scripts/setup_sqlite_local.py` |
+Optional observability for the existing **16-node** coach workflow in `demo/be/app/graph/workflow.py`. Not required for the FE demo — FastAPI remains the production entrypoint.
 
-Reset demo data (destructive): `python scripts/reset_db.py` then seed again. See [demo/be/README.md](demo/be/README.md).
+**LangGraph** orchestrates the pipeline. **LangSmith** adds external tracing and **LangGraph Studio** lets you visualize and step through the graph locally (`memory_rag_coach` in [demo/be/langgraph.json](demo/be/langgraph.json)).
+
+### LangSmith tracing
+
+Set APAC tracing vars in `demo/be/.env` (one PAT for tracing and Studio):
+
+```env
+LANGSMITH_TRACING=true
+LANGSMITH_ENDPOINT=https://apac.api.smith.langchain.com
+LANGSMITH_PROJECT=memory-rag-demo
+LANGSMITH_API_KEY=<your_apac_pat>
+```
+
+Start the API, call `POST /api/coach/chat`, then open **Tracing** at https://apac.smith.langchain.com and look for run name `memory-rag-coach-workflow`.
+
+<p align="center">
+  <img src="asset/langsmith_tracing.png" alt="LangSmith APAC tracing view for memory-rag-coach-workflow" width="560" />
+</p>
+
+Full smoke-test checklist: [demo/be/docs/langsmith_studio_setup.md](demo/be/docs/langsmith_studio_setup.md)
+
+### LangGraph Studio
+
+From `demo/be`, with MySQL seeded and the same `.env`:
+
+```bash
+source .venv/bin/activate
+export PYTHONPATH=.
+pip install -U "langgraph-cli[inmem]"
+./scripts/run_studio.sh
+```
+
+Select graph **`memory_rag_coach`** in Studio (not the default `model → tools` template). On WSL2, use the tunnel URL printed by `run_studio.sh` — Windows browsers cannot reach `http://127.0.0.1:2024` inside WSL.
+
+<p align="center">
+  <img src="asset/langsmith_studio.png" alt="LangGraph Studio showing the memory_rag_coach 16-node workflow" width="560" />
+</p>
+
+Expected nodes:
+
+```text
+load_context → classify_question → retrieve_profile → retrieve_swing_history
+→ retrieve_memory → retrieve_knowledge → invoke_tools → generate_answer
+→ validate_output → evaluate_answer → (guardrail | rewrite_query | fallback_answer)
+→ save_messages → (update_memory | log_eval) → log_eval
+```
+
+Setup details, sample input, and troubleshooting: [demo/be/docs/langgraph_studio_setup.md](demo/be/docs/langgraph_studio_setup.md)

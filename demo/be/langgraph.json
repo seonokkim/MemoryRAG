@@ -5,5 +5,17 @@
   "graphs": {
     "memory_rag_coach": "./app/graph/studio.py:graph"
   },
-  "env": ".env"
+  "env": ".env",
+  "http": {
+    "cors": {
+      "allow_origins": [
+        "https://apac.smith.langchain.com",
+        "https://smith.langchain.com",
+        "https://eu.smith.langchain.com"
+      ],
+      "allow_methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+      "allow_headers": ["*"],
+      "allow_credentials": true
+    }
+  }
 }

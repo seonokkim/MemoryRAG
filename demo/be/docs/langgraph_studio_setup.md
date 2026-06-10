@@ -20,7 +20,7 @@ LANGSMITH_API_KEY=<your_apac_pat>
 LLM_PROVIDER=gemini_api
 GEMINI_MODEL=gemini-flash-latest
 VECTOR_STORE_PROVIDER=none
-DATABASE_URL=mysql+pymysql://memory_rag:your_local_db_password@localhost:3306/memory_rag
+DATABASE_URL=mysql+pymysql://memory_rag:memory_rag@localhost:3306/memory_rag
 
 ENABLE_QUALITY_LOOP=true
 ENABLE_AGENT_TOOLS=true
@@ -136,6 +136,20 @@ export PYTHONPATH=.
 
 Copy the **Studio UI** line from the terminal (with `trycloudflare.com` baseUrl when tunnel is on).  
 Also ensure `langgraph` runs via `.venv/bin/langgraph` or activated venv — `langgraph: command not found` means the server never started.
+
+### `domain is not allowed` (tunnel / Configure connection)
+
+LangSmith blocks unknown Agent Server domains until you **allowlist** them (security).
+
+1. Open https://apac.smith.langchain.com/studio/
+2. Click **Configure connection** (or **Connect to a local server**)
+3. **Base URL:** paste the tunnel from terminal, e.g. `https://xxxx.trycloudflare.com`
+4. Expand **Advanced Settings** → **Allowed origins / Allowed list**
+5. Add the **same** tunnel URL (or domain `xxxx.trycloudflare.com`)
+6. Click **Connect**
+7. Select graph **`memory_rag_coach`**
+
+Do not skip step 4–5 — pasting only the Studio URL in the address bar is not enough.
 
 ### Studio shows only `model → tools`
 
